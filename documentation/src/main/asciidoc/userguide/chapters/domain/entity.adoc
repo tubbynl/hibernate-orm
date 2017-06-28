@@ -2,6 +2,8 @@
 === Entity types
 :sourcedir-locking: ../../../../../test/java/org/hibernate/userguide/locking
 :sourcedir-mapping: ../../../../../test/java/org/hibernate/userguide/mapping/basic
+:sourcedir-proxy: ../../../../../test/java/org/hibernate/userguide/proxy
+:sourcedir-persister: ../../../../../test/java/org/hibernate/userguide/persister
 :extrasdir: extras
 
 .Usage of the word _entity_
@@ -312,7 +314,141 @@ include::{sourcedir-mapping}/SubselectTest.java[tag=mapping-Subselect-entity-ref
 ----
 ====
 
-The goala of the `@Synchronize` annotation in the `AccountSummary` entity mapping is to instruct Hibernate which database tables are needed by the
+The goal of the `@Synchronize` annotation in the `AccountSummary` entity mapping is to instruct Hibernate which database tables are needed by the
 underlying `@Subselect` SQL query. This way, when executing a HQL or JPQL which selects from the `AccountSummary` entity,
 Hibernate will trigger a Persistence Context flush if there are pending `Account`, `Client` or `AccountTransaction` entity state transitions.
 
+[[entity-proxy]]
+==== Define a custom entity proxy
+
+By default, when it needs to use a proxy instead of the actual Pojo, Hibernate is going to use a Bytecode manipulation library like
+http://jboss-javassist.github.io/javassist/[Javassist] or
+http://bytebuddy.net/[Byte Buddy].
+
+However, if the entity class is final, Javassist will not create a Proxy and you will get a Pojo even when you only need a Proxy reference.
+In this case, you could proxy an interface that this particular entity implements, as illustrated by the following example.
+
+[[entity-proxy-interface-mapping]]
+.Final entity class implementing the `Identifiable` interface
+====
+[source,java]
+----
+include::{sourcedir-proxy}/ProxyInterfaceTest.java[tag=entity-proxy-interface-mapping,indent=0]
+----
+====
+
+The https://docs.jboss.org/hibernate/orm/{majorMinorVersion}/javadocs/org/hibernate/annotations/Proxy.html[`@Proxy`]
+annotation is used to specify a custom Proxy implementation for the current annotated entity.
+
+When loading the `Book` entity proxy, Hibernate is going to proxy the `Identifiable` interface instead as illustarted by the following example:
+
+[[entity-proxy-persist-mapping]]
+.Proxying the final entity class implementing the `Identifiable` interface
+====
+[source,java]
+----
+include::{sourcedir-proxy}/ProxyInterfaceTest.java[tag=entity-proxy-persist-mapping,indent=0]
+----
+
+[source,sql]
+----
+include::{extrasdir}/entity/entity-proxy-persist-mapping.sql[]
+----
+====
+
+As you can see in the associated SQL snippet, Hibernate issues no SQL SELECT query since the Proxy can be
+constructed without needing to fetch the actual entity Pojo.
+
+[[entity-tuplizer]]
+==== Dynamic entity proxies using the @Tuplizer annotation
+
+It is possible to map your entities as dynamic proxies using
+the https://docs.jboss.org/hibernate/orm/{majorMinorVersion}/javadocs/org/hibernate/annotations/Tuplizer.html[`@Tuplizer`] annotation.
+
+In the following entity mapping, both the embeddable and the entity are mapped as interfaces, not Pojos.
+
+[[entity-tuplizer-entity-mapping]]
+.Dynamic entity proxy mapping
+====
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/Cuisine.java[tag=entity-tuplizer-entity-mapping,indent=0]
+----
+
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/Country.java[tag=entity-tuplizer-entity-mapping,indent=0]
+----
+====
+
+The `@Tuplizer` instructs Hibernate to use the `DynamicEntityTuplizer` and `DynamicEmbeddableTuplizer` to handle
+the associated entity and embeddable object types.
+
+Both the `Cuising` entity and the `Country` embeddable types are going to be instantiated as Java dynamic proxies,
+as you can see in the following `DynamicInstantiator` example:
+
+[[entity-tuplizer-instantiator]]
+.Instantiating entities and embeddables as dynamic proxies
+====
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/DynamicEntityTuplizer.java[tag=entity-tuplizer-instantiator,indent=0]
+----
+
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/DynamicEmbeddableTuplizer.java[tag=entity-tuplizer-instantiator,indent=0]
+----
+
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/DynamicInstantiator.java[tag=entity-tuplizer-instantiator,indent=0]
+----
+
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/ProxyHelper.java[tag=entity-tuplizer-instantiator,indent=0]
+----
+
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/DataProxyHandler.java[tag=entity-tuplizer-instantiator,indent=0]
+----
+====
+
+With the `DynamicInstantiator` in place, we can work with the dynamic proxy entities just like with Pojo entities.
+
+[[entity-tuplizer-dynamic-proxy-example]]
+.Persisting entities and embeddables as dynamic proxies
+====
+[source,java]
+----
+include::{sourcedir-proxy}/tuplizer/TuplizerTest.java[tag=entity-tuplizer-dynamic-proxy-example,indent=0]
+----
+====
+
+[[entity-persister]]
+==== Define a custom entity persister
+
+The https://docs.jboss.org/hibernate/orm/{majorMinorVersion}/javadocs/org/hibernate/annotations/Persister.html[`@Persister`] annotation is used to specify a custom entity or collection persister.
+
+For entities, the custom persister must implement the https://docs.jboss.org/hibernate/orm/{majorMinorVersion}/javadocs/org/hibernate/persister/entity/EntityPersister.html[`EntityPersister`] interface.
+
+For collections, the custom persister must implement the https://docs.jboss.org/hibernate/orm/{majorMinorVersion}/javadocs/org/hibernate/persister/collection/CollectionPersister.html[`CollectionPersister`] interface.
+
+[[entity-persister-mapping]]
+.Entity persister mapping
+====
+[source,java]
+----
+include::{sourcedir-persister}/Author.java[tag=entity-persister-mapping,indent=0]
+----
+
+[source,java]
+----
+include::{sourcedir-persister}/Book.java[tag=entity-persister-mapping,indent=0]
+----
+====
+
+By providing you own `EntityPersister` and `CollectionPersister` implementations,
+you can control how entities and collections are persisted in to the database.
